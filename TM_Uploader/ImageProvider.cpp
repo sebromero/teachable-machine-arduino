@@ -12,8 +12,9 @@
   See the License for the specific language governing permissions and
   limitations under the License.
   ==============================================================================
-  */
 
+  The code was refactored and modified to work with Nicla Vision by Sebastian Romero s.romero@arduino.cc
+  */
 
 #include "ImageProvider.h"
 #include <Arduino.h>
@@ -43,7 +44,6 @@ constexpr int inputImageHeight = 240;
   constexpr int inputImageDataSize = inputImageWidth * inputImageHeight * inputImageChannels;  // QVGA: 320x240 X 2 bytes per pixel (RGB565)
   byte inputImageData[inputImageDataSize];
 #endif
-
 
 bool cameraBegin() {
   #if defined(ARDUINO_NICLA_VISION)
