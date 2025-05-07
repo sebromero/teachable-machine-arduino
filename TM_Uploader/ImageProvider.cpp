@@ -29,6 +29,8 @@
 
 #if defined(ARDUINO_NICLA_VISION)
   constexpr bool isGrayscale = false;
+  // TODO Native grayscale mode doesn't work yet
+  // There is some issue with the offsets
 #else
   constexpr bool isGrayscale = false;
 #endif
@@ -108,7 +110,7 @@ float readPixelValue(const uint8_t* buffer, size_t bufferSize, int index, bool i
  * @param isGrayscale Whether the source image is already in grayscale format
  * @return true if processing was successful
  */
-boolean processImage(int targetWidth, int targetHeight, uint8_t* inputBuffer, size_t inputBufferSize, uint8_t* outputBuffer, bool isGrayscale = false) {
+boolean processImage(int targetWidth, int targetHeight, uint8_t* inputBuffer, size_t inputBufferSize, uint8_t* outputBuffer, bool isGrayscale) {
   // Ensure image dimensions are valid
   if (targetWidth <= 0 || targetHeight <= 0 || outputBuffer == nullptr) {
     return false;
