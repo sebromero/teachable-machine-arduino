@@ -18,6 +18,6 @@
 #define IMAGE_PROVIDER_H_
 #include <Arduino.h>
 
-bool getImage(int image_width, int image_height, int channels, uint8_t* image_data);
+bool getImage(int targetWidth, int targetHeight, int channels, uint8_t* outputBuffer);
 bool cameraBegin();
 #endif  // IMAGE_PROVIDER_H_

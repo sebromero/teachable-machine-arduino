@@ -42,7 +42,9 @@
       - D1 connected to 1 / TX
       - D0 connected to 10
 
+The code was refactored and modified to work with Nicla Vision by Sebastian Romero s.romero@arduino.cc
 */
+
 #include <Arduino.h>
 #include "ImageProvider.h"
 

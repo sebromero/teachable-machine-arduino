@@ -16,37 +16,6 @@
 
 
 #include "ImageProvider.h"
-
-
-/*
-  OV767X - Camera Capture Raw Bytes
-
-  This sketch reads a frame from the OmniVision OV7670 camera
-  and writes the bytes to the Serial port. Use the Processing
-  sketch in the extras folder to visualize the camera output.
-
-  Circuit:
-    - Arduino Nano 33 BLE board
-    - OV7670 camera module:
-      - 3.3 connected to 3.3
-      - GND connected GND
-      - SIOC connected to A5
-      - SIOD connected to A4
-      - VSYNC connected to 8
-      - HREF connected to A1
-      - PCLK connected to A0
-      - XCLK connected to 9
-      - D7 connected to 4
-      - D6 connected to 6
-      - D5 connected to 5
-      - D4 connected to 3
-      - D3 connected to 2
-      - D2 connected to 0 / RX
-      - D1 connected to 1 / TX
-      - D0 connected to 10
-
-  This example code is in the public domain.
-*/
 #include <Arduino.h>
 
 #if defined(ARDUINO_NICLA_VISION)
@@ -58,19 +27,26 @@
   #include <Arduino_OV767X.h>
 #endif
 
-constexpr int kCaptureWidth = 320;
-constexpr int kCaptureHeight = 240;
-constexpr int capDataLen = kCaptureWidth * kCaptureHeight * 2;
-
 #if defined(ARDUINO_NICLA_VISION)
-  uint8_t* captured_data;
+  constexpr bool isGrayscale = false;
 #else
-  byte captured_data[kCaptureWidth * kCaptureHeight * 2]; // QVGA: 320x240 X 2 bytes per pixel (RGB565)
+  constexpr bool isGrayscale = false;
 #endif
+
+constexpr int inputImageWidth = 320;
+constexpr int inputImageHeight = 240;
+
+#if !defined(ARDUINO_NICLA_VISION)
+  constexpr int inputImageChannels = isGrayscale ? 1 : 2; // 1 for grayscale, 2 for RGB565
+  constexpr int inputImageDataSize = inputImageWidth * inputImageHeight * inputImageChannels;  // QVGA: 320x240 X 2 bytes per pixel (RGB565)
+  byte inputImageData[inputImageDataSize];
+#endif
+
 
 bool cameraBegin() {
   #if defined(ARDUINO_NICLA_VISION)
-    if(!cam.begin(CAMERA_R320x240, CAMERA_RGB565)){
+    auto mode = isGrayscale ? CAMERA_GRAYSCALE : CAMERA_RGB565;
+    if(!cam.begin(CAMERA_R320x240, mode)){
       return false;
     }
     cam.setVerticalFlip(true);
@@ -94,8 +70,8 @@ float convertRGB565ToGrayscale(uint16_t color) {
 }
 
 // Read RGB565 color from buffer at specified index
-uint16_t readColorFromBuffer(const uint8_t* buffer, int index) {
-  if (index < 0 || index >= capDataLen - 1) {
+uint16_t readColorFromBuffer(const uint8_t* buffer, size_t bufferSize, int index) {
+  if (index < 0 || index >= bufferSize - 1) {
     return 0; // Return black if out of bounds
   }
   
@@ -104,44 +80,97 @@ uint16_t readColorFromBuffer(const uint8_t* buffer, int index) {
   return ((uint16_t)high_byte << 8) | low_byte;
 }
 
-// Crop image and convert it to grayscale
-boolean processImage(int image_width, int image_height, uint8_t* image_data) {
-  const int imgSize = 96;
+// Safely read a pixel value from buffer
+float readPixelValue(const uint8_t* buffer, size_t bufferSize, int index, bool isGrayscale) {
+  // Check bounds
+  if (isGrayscale) {
+    if (index < 0 || index >= bufferSize) {
+      return 0.0f;
+    }
+    return static_cast<float>(buffer[index]);
+  } else {
+    if (index < 0 || index >= bufferSize - 1) {
+      return 0.0f;
+    }
+    uint16_t color = readColorFromBuffer(buffer, bufferSize, index);
+    return convertRGB565ToGrayscale(color);
+  }
+}
+
+/**
+ * Process the input image by cropping and converting to grayscale if needed
+ * 
+ * @param targetWidth Width of the output image
+ * @param targetHeight Height of the output image
+ * @param inputBuffer Input buffer containing the image data
+ * @param inputBufferSize Size of the input buffer
+ * @param outputBuffer Output buffer for processed image data
+ * @param isGrayscale Whether the source image is already in grayscale format
+ * @return true if processing was successful
+ */
+boolean processImage(int targetWidth, int targetHeight, uint8_t* inputBuffer, size_t inputBufferSize, uint8_t* outputBuffer, bool isGrayscale = false) {
+  // Ensure image dimensions are valid
+  if (targetWidth <= 0 || targetHeight <= 0 || outputBuffer == nullptr) {
+    return false;
+  }
   
-  for (int y = 0; y < imgSize; y++) {
-    for (int x = 0; x < imgSize; x++) {
+  // For this implementation we assume square output
+  const int targetSize = targetWidth;
+  const int bytesPerPixel = isGrayscale ? 1 : 2;
+  
+  // Calculate bounds for source image sampling with proper margins
+  // Keep a balanced margin on both sides of the image for a centered crop
+  const int cropWidth = inputImageWidth - 120; // 40px margin on left, 80px on right
+  const int cropStartX = 40;                 // Start 40px from left edge
+  const int cropHeight = inputImageHeight;    // Use full height
+  const int cropStartY = 0;                 // Start from top
+  
+  for (int y = 0; y < targetSize; y++) {
+    for (int x = 0; x < targetSize; x++) {
       // Map destination coordinates to source coordinates for cropping
-      int currentCapX = floor(map(x, 0, imgSize, 40, kCaptureWidth - 80));
-      int currentCapY = floor(map(y, 0, imgSize, 0, kCaptureHeight));
+      // More precise mapping with proper boundaries
+      int croppedX = cropStartX + (x * cropWidth / targetSize);
+      int croppedY = cropStartY + (y * cropHeight / targetSize);
       
-      // Calculate indices for 2x2 pixel sampling
-      int indices[4] = {
-        (currentCapY * kCaptureWidth + currentCapX) * 2,                   // Top-left
-        (currentCapY * kCaptureWidth + currentCapX + 1) * 2,               // Top-right
-        ((currentCapY + 1) * kCaptureWidth + currentCapX) * 2,             // Bottom-left
-        ((currentCapY + 1) * kCaptureWidth + currentCapX + 1) * 2          // Bottom-right
-      };
+      // Sample 2x2 grid of pixels and average their values (when possible)
+      float pixelValue = 0.0f;
+      int validSamples = 0;
       
-      // Sample 2x2 grid of pixels and average their grayscale values
-      float gray_value = 0.0f;
-      int valid_samples = 0;
-      
-      for (int i = 0; i < 4; i++) {
-        if (indices[i] >= 0 && indices[i] < capDataLen - 1) {
-          uint16_t color = readColorFromBuffer(captured_data, indices[i]);
-          gray_value += convertRGB565ToGrayscale(color);
-          valid_samples++;
+      // Process each pixel in the 2x2 grid
+      for (int offsetY = 0; offsetY < 2; offsetY++) {
+        for (int offsetX = 0; offsetX < 2; offsetX++) {
+          int sourceX = croppedX + offsetX;
+          int sourceY = croppedY + offsetY;
+          
+          // Ensure we're within source image bounds
+          if (sourceX < 0 || sourceX >= inputImageWidth || 
+              sourceY < 0 || sourceY >= inputImageHeight) {
+            continue;
+          }
+          
+          // Calculate buffer index based on pixel format
+          int inputIndex = (sourceY * inputImageWidth + sourceX) * bytesPerPixel;
+          
+          // Additional bounds check for buffer access
+          if (inputIndex >= 0 && inputIndex < inputBufferSize - (bytesPerPixel - 1)) {
+            pixelValue += readPixelValue(inputBuffer, inputBufferSize, inputIndex, isGrayscale);
+            validSamples++;
+          }
         }
       }
       
-      // Average the grayscale values from valid samples
-      if (valid_samples > 0) {
-        gray_value /= valid_samples;
+      // Average the values from valid samples
+      if (validSamples > 0) {
+        pixelValue /= validSamples;
       }
       
       // The index of this pixel in our flat output buffer
-      int output_index = y * image_width + x;
-      image_data[output_index] = static_cast<int8_t>(gray_value);
+      int outputIndex = y * targetWidth + x;
+      
+      // Ensure we're writing within bounds of the output buffer
+      if (outputIndex < targetWidth * targetHeight) {
+        outputBuffer[outputIndex] = static_cast<int8_t>(pixelValue);
+      }
     }
   }
   
@@ -149,14 +178,14 @@ boolean processImage(int image_width, int image_height, uint8_t* image_data) {
 }
 
 // Get an image from the camera module
-boolean getImage(int image_width, int image_height, int channels, uint8_t* image_data) {
+boolean getImage(int targetWidth, int targetHeight, int channels, uint8_t* outputBuffer){
   #if defined(ARDUINO_NICLA_VISION)
     if(cam.grabFrame(fb, 3000) != 0) return false;
-    captured_data = fb.getBuffer();
-    // size_t bufferSize = cam.frameSize();
+    size_t bufferSize = cam.frameSize();
+    return processImage(targetWidth, targetHeight, fb.getBuffer(), bufferSize, outputBuffer, isGrayscale);
   #else
-    Camera.readFrame(captured_data);
+    Camera.readFrame(inputImageData);
+    return processImage(targetWidth, targetHeight, inputImageData, inputImageDataSize, outputBuffer, isGrayscale);
   #endif
 
-  return processImage(image_width, image_height, image_data);
 }
