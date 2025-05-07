@@ -125,12 +125,12 @@ boolean processImage(int targetWidth, int targetHeight, uint8_t* inputBuffer, si
   const int cropHeight = inputImageHeight;    // Use full height
   const int cropStartY = 0;                 // Start from top
   
-  for (int y = 0; y < targetSize; y++) {
-    for (int x = 0; x < targetSize; x++) {
+  for (uint16_t y = 0; y < targetSize; y++) {
+    for (uint16_t x = 0; x < targetSize; x++) {
       // Map destination coordinates to source coordinates for cropping
       // More precise mapping with proper boundaries
-      int croppedX = cropStartX + (x * cropWidth / targetSize);
-      int croppedY = cropStartY + (y * cropHeight / targetSize);
+      uint16_t croppedX = cropStartX + (x * cropWidth / targetSize);
+      uint16_t croppedY = cropStartY + (y * cropHeight / targetSize);
       
       // Sample 2x2 grid of pixels and average their values (when possible)
       float pixelValue = 0.0f;
@@ -139,8 +139,8 @@ boolean processImage(int targetWidth, int targetHeight, uint8_t* inputBuffer, si
       // Process each pixel in the 2x2 grid
       for (int offsetY = 0; offsetY < 2; offsetY++) {
         for (int offsetX = 0; offsetX < 2; offsetX++) {
-          int sourceX = croppedX + offsetX;
-          int sourceY = croppedY + offsetY;
+          uint16_t sourceX = croppedX + offsetX;
+          uint16_t sourceY = croppedY + offsetY;
           
           // Ensure we're within source image bounds
           if (sourceX < 0 || sourceX >= inputImageWidth || 
@@ -149,7 +149,7 @@ boolean processImage(int targetWidth, int targetHeight, uint8_t* inputBuffer, si
           }
           
           // Calculate buffer index based on pixel format
-          int inputIndex = (sourceY * inputImageWidth + sourceX) * bytesPerPixel;
+          uint32_t inputIndex = (sourceY * inputImageWidth + sourceX) * bytesPerPixel;
           
           // Additional bounds check for buffer access
           if (inputIndex >= 0 && inputIndex < inputBufferSize - (bytesPerPixel - 1)) {
@@ -165,7 +165,7 @@ boolean processImage(int targetWidth, int targetHeight, uint8_t* inputBuffer, si
       }
       
       // The index of this pixel in our flat output buffer
-      int outputIndex = y * targetWidth + x;
+      uint32_t outputIndex = y * targetWidth + x;
       
       // Ensure we're writing within bounds of the output buffer
       if (outputIndex < targetWidth * targetHeight) {
